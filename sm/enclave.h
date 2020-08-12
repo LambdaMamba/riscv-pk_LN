@@ -109,6 +109,7 @@ struct report
 
 /*** SBI functions & external functions ***/
 // callables from the host
+enclave_ret_code mymmapadd_enclave(enclave_id eid, uintptr_t mmapaddr, size_t mmapsize);
 enclave_ret_code create_enclave(struct keystone_sbi_create create_args);
 enclave_ret_code destroy_enclave(enclave_id eid);
 enclave_ret_code run_enclave(uintptr_t* host_regs, enclave_id eid);
@@ -126,3 +127,4 @@ int get_enclave_region_index(enclave_id eid, enum enclave_region_type type);
 uintptr_t get_enclave_region_base(enclave_id eid, int memid);
 uintptr_t get_enclave_region_size(enclave_id eid, int memid);
 #endif
+

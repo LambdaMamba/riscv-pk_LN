@@ -38,7 +38,7 @@ extern byte dev_public_key[PUBLIC_KEY_SIZE];
 static inline enclave_ret_code context_switch_to_enclave(uintptr_t* regs,
                                                 enclave_id eid,
                                                 int load_parameters){
-
+  printm("[MY_SM] context_switch_to_enclave()\r\n");
   /* save host context */
   swap_prev_state(&enclaves[eid].threads[0], regs);
   swap_prev_mepc(&enclaves[eid].threads[0], read_csr(mepc));
@@ -82,6 +82,7 @@ static inline enclave_ret_code context_switch_to_enclave(uintptr_t* regs,
   int memid;
   for(memid=0; memid < ENCLAVE_REGIONS_MAX; memid++) {
     if(enclaves[eid].regions[memid].type != REGION_INVALID) {
+	printm("[MY_SM] For Enclave ID %d and Mem ID %d Calling pmp_set() from context_switch_to_enclave()\n", eid, memid);
       pmp_set(enclaves[eid].regions[memid].pmp_rid, PMP_ALL_PERM);
     }
   }
@@ -94,11 +95,12 @@ static inline enclave_ret_code context_switch_to_enclave(uintptr_t* regs,
 
 static inline void context_switch_to_host(uintptr_t* encl_regs,
     enclave_id eid){
-
+  printm("[MY_SM] context_switch_to_host()\r\n");
   // set PMP
   int memid;
   for(memid=0; memid < ENCLAVE_REGIONS_MAX; memid++) {
     if(enclaves[eid].regions[memid].type != REGION_INVALID) {
+      printm("[MY_SM] For Enclave ID %d and Mem ID %d Calling pmp_set() from context_switch_to_host()\n", eid, memid);
       pmp_set(enclaves[eid].regions[memid].pmp_rid, PMP_NO_PERM);
     }
   }
@@ -126,6 +128,7 @@ static inline void context_switch_to_host(uintptr_t* encl_regs,
  * Called once by the SM on startup
  */
 void enclave_init_metadata(){
+  printm("[MY_SM] enclave_init_metadata()\r\n");
   enclave_id eid;
   int i=0;
 
@@ -145,6 +148,7 @@ void enclave_init_metadata(){
 
 static enclave_ret_code clean_enclave_memory(uintptr_t utbase, uintptr_t utsize)
 {
+	printm("[MY_SM] clean_enclave_memory()\r\n");
 
   // This function is quite temporary. See issue #38
 
@@ -221,6 +225,8 @@ uintptr_t get_enclave_region_base(enclave_id eid, int memid)
 static enclave_ret_code copy_word_to_host(uintptr_t* dest_ptr, uintptr_t value)
 {
   int region_overlap = 0;
+  printm("[MY_SM] copy_word_to_host()\r\n");
+
   spinlock_lock(&encl_lock);
   region_overlap = pmp_detect_region_overlap_atomic((uintptr_t)dest_ptr,
                                                 sizeof(uintptr_t));
@@ -241,7 +247,7 @@ static enclave_ret_code copy_word_to_host(uintptr_t* dest_ptr, uintptr_t value)
  * Dest should be inside the SM memory.
  */
 enclave_ret_code copy_from_host(void* source, void* dest, size_t size){
-
+  printm("[MY_SM] copy_from_host()\r\n");
   int region_overlap = 0;
   spinlock_lock(&encl_lock);
   region_overlap = pmp_detect_region_overlap_atomic((uintptr_t) source, size);
@@ -259,7 +265,7 @@ enclave_ret_code copy_from_host(void* source, void* dest, size_t size){
 static int buffer_in_enclave_region(struct enclave* enclave,
                                     void* start, size_t size){
   int legal = 0;
-
+  printm("[MY_SM] buffer_in_enclave_region()\r\n");
   int i;
   /* Check if the source is in a valid region */
   for(i = 0; i < ENCLAVE_REGIONS_MAX; i++){
@@ -279,7 +285,7 @@ static int buffer_in_enclave_region(struct enclave* enclave,
 /* copies data from enclave, source must be inside EPM */
 static enclave_ret_code copy_from_enclave(struct enclave* enclave,
                                           void* dest, void* source, size_t size) {
-
+printm("[MY_SM] copy_from_enclave()\r\n");
   spinlock_lock(&encl_lock);
   int legal = buffer_in_enclave_region(enclave, source, size);
 
@@ -297,6 +303,7 @@ static enclave_ret_code copy_from_enclave(struct enclave* enclave,
 static enclave_ret_code copy_to_enclave(struct enclave* enclave,
                                         void* dest, void* source, size_t size) {
   spinlock_lock(&encl_lock);
+  printm("[MY_SM] copy_to_enclave()\r\n");
   int legal = buffer_in_enclave_region(enclave, dest, size);
 
   if(legal)
@@ -366,6 +373,29 @@ static int is_create_args_valid(struct keystone_sbi_create* args)
  *********************************/
 
 
+
+enclave_ret_code mymmapadd_enclave(enclave_id eid, uintptr_t mmapaddr, size_t mmapsize){
+    int region;
+    printm("[MY_SM] Original enclave base: 0x%x, size: 0x%zx \r\n ", enclaves[eid].pa_params.dram_base, enclaves[eid].pa_params.dram_size);
+    enclaves[eid].pa_params.dram_size = enclaves[eid].pa_params.dram_size + mmapsize;
+  
+    printm("[MY_SM] Freeing the original enclave pmp\r\n");
+
+    pmp_unset_global(enclaves[eid].regions[0].pmp_rid);
+    pmp_region_free_atomic(enclaves[eid].regions[0].pmp_rid);
+
+    printm("[MY_SM] Setting the new enclave pmp\r\n");
+
+    pmp_region_init_atomic(enclaves[eid].pa_params.dram_base, enclaves[eid].pa_params.dram_size, PMP_PRI_ANY, &enclaves[eid].regions[0].pmp_rid, 0);
+     printm("[MY_SM] New enclave base: 0x%x, size: 0x%zx \r\n ", enclaves[eid].pa_params.dram_base, enclaves[eid].pa_params.dram_size);
+
+    return ENCLAVE_SUCCESS;
+}
+	
+
+
+
+
 /* This handles creation of a new enclave, based on arguments provided
  * by the untrusted host.
  *
@@ -373,20 +403,26 @@ static int is_create_args_valid(struct keystone_sbi_create* args)
  */
 enclave_ret_code create_enclave(struct keystone_sbi_create create_args)
 {
-  /* EPM and UTM parameters */
+  printm("[MY_SM] create_enclave()\r\n");
+
+  
+	/* EPM and UTM parameters */
   uintptr_t base = create_args.epm_region.paddr;
-  size_t size = create_args.epm_region.size;
+  size_t size = create_args.epm_region.size - 1048576;
   uintptr_t utbase = create_args.utm_region.paddr;
+  //uintptr_t utbase = 925171712;
   size_t utsize = create_args.utm_region.size;
+ // size_t utsize = 327680;
   enclave_id* eidptr = create_args.eid_pptr;
 
   uint8_t perm = 0;
   enclave_id eid;
   enclave_ret_code ret;
-  int region, shared_region;
+  int region;
   int i;
   int region_overlap = 0;
-
+  int shared_region;
+ // printm("[SM] region_overlap] %d\r\n", region_overlap);
   /* Runtime parameters */
   if(!is_create_args_valid(&create_args))
     return ENCLAVE_ILLEGAL_ARGUMENT;
@@ -394,11 +430,18 @@ enclave_ret_code create_enclave(struct keystone_sbi_create create_args)
   /* set va params */
   struct runtime_va_params_t params = create_args.params;
   struct runtime_pa_params pa_params;
+//  printm("[MY_SM] dram_base: %x", base);
+//  printm("[MY_SM] dram_size: %zx", size); 
   pa_params.dram_base = base;
   pa_params.dram_size = size;
   pa_params.runtime_base = create_args.runtime_paddr;
   pa_params.user_base = create_args.user_paddr;
   pa_params.free_base = create_args.free_paddr;
+
+  printm("[MY_SM] dram base: 0x%x\r\n", base);
+  printm("[MY_SM] dram size: 0x%zx\r\n", size);
+  printm("[MY_SM] untrusted base: 0x%x\r\n", utbase);
+  printm("[MY_SM] untrusted size: 0x%zx\r\n", utsize);
 
 
   // allocate eid
@@ -408,14 +451,17 @@ enclave_ret_code create_enclave(struct keystone_sbi_create create_args)
 
   // create a PMP region bound to the enclave
   ret = ENCLAVE_PMP_FAILURE;
+  printm("[MY_SM] Creating PMP region bound to enclave, base: 0x%x, size: 0x%zx\r\n", base, size);
   if(pmp_region_init_atomic(base, size, PMP_PRI_ANY, &region, 0))
     goto free_encl_idx;
 
   // create PMP region for shared memory
+  printm("[MY_SM] Creating PMP region for shared memory, base: 0x%x, size: 0x%zx\r\n", utbase, utsize);
   if(pmp_region_init_atomic(utbase, utsize, PMP_PRI_BOTTOM, &shared_region, 0))
     goto free_region;
 
   // set pmp registers for private region (not shared)
+  printm("[MY_SM] Setting PMP registers for private region %d\r\n", region);
   if(pmp_set_global(region, PMP_NO_PERM))
     goto free_shared_region;
 
@@ -478,6 +524,7 @@ error:
  */
 enclave_ret_code destroy_enclave(enclave_id eid)
 {
+printm("[MY_SM] destroy_enclave()\r\n");
   int destroyable;
 
   spinlock_lock(&encl_lock);
@@ -541,6 +588,7 @@ enclave_ret_code destroy_enclave(enclave_id eid)
 enclave_ret_code run_enclave(uintptr_t* host_regs, enclave_id eid)
 {
   int runable;
+  printm("[MY_SM] run_enclave()\r\n");
 
   spinlock_lock(&encl_lock);
   runable = (ENCLAVE_EXISTS(eid)
@@ -562,6 +610,8 @@ enclave_ret_code run_enclave(uintptr_t* host_regs, enclave_id eid)
 enclave_ret_code exit_enclave(uintptr_t* encl_regs, unsigned long retval, enclave_id eid)
 {
   int exitable;
+  printm("[MY_SM] exit_enclave()\r\n");
+
 
   spinlock_lock(&encl_lock);
   exitable = enclaves[eid].state == RUNNING;
@@ -585,6 +635,7 @@ enclave_ret_code exit_enclave(uintptr_t* encl_regs, unsigned long retval, enclav
 enclave_ret_code stop_enclave(uintptr_t* encl_regs, uint64_t request, enclave_id eid)
 {
   int stoppable;
+printm("[MY_SM] stop_enclave()\r\n");
 
   spinlock_lock(&encl_lock);
   stoppable = enclaves[eid].state == RUNNING;
@@ -594,20 +645,24 @@ enclave_ret_code stop_enclave(uintptr_t* encl_regs, uint64_t request, enclave_id
     return ENCLAVE_NOT_RUNNING;
 
   context_switch_to_host(encl_regs, eid);
-
+  
   switch(request) {
   case(STOP_TIMER_INTERRUPT):
+	  printm("[MY_SM] TIMER INTERRUPT, STOP ENCLAVE\r\n");
     return ENCLAVE_INTERRUPTED;
   case(STOP_EDGE_CALL_HOST):
+    printm("[MY_SM] EDGE CALL, STOPPING ENCLAVE\r\n");
     return ENCLAVE_EDGE_CALL_HOST;
   default:
     return ENCLAVE_UNKNOWN_ERROR;
+    printm("[MY_SM] UNKNOWN STOP\r\n");
   }
 }
 
 enclave_ret_code resume_enclave(uintptr_t* host_regs, enclave_id eid)
 {
   int resumable;
+printm("[MY_SM] resume_enclave()\r\n");
 
   spinlock_lock(&encl_lock);
   resumable = (ENCLAVE_EXISTS(eid)
@@ -625,6 +680,8 @@ enclave_ret_code resume_enclave(uintptr_t* host_regs, enclave_id eid)
 
 enclave_ret_code attest_enclave(uintptr_t report_ptr, uintptr_t data, uintptr_t size, enclave_id eid)
 {
+	printm("[MY_SM] attest_enclave()\r\n");
+
   int attestable;
   struct report report;
   int ret;
@@ -673,3 +730,5 @@ enclave_ret_code attest_enclave(uintptr_t report_ptr, uintptr_t data, uintptr_t 
 
   return ENCLAVE_SUCCESS;
 }
+
+

@@ -11,6 +11,17 @@
 #include "platform.h"
 #include "plugins/plugins.h"
 
+uintptr_t mcall_sm_mymmapadd_enclave(unsigned long eid, uintptr_t mmapaddr, size_t mmapsize){
+    enclave_ret_code ret;
+    printm("[MY_SM] Entered mcall_sm_mymmapadd_enclave\r\n");
+    if (cpu_is_enclave_context()) {
+        return ENCLAVE_SBI_PROHIBITED;
+    }
+    ret = mymmapadd_enclave(eid, mmapaddr, mmapsize);
+    return ret;
+
+}
+
 uintptr_t mcall_sm_create_enclave(uintptr_t create_args)
 {
   struct keystone_sbi_create create_args_local;
@@ -148,3 +159,5 @@ uintptr_t mcall_sm_not_implemented(uintptr_t* encl_regs, unsigned long cause)
 
   return exit_enclave(encl_regs, (uint64_t)-1UL, cpu_get_enclave_id());
 }
+
+

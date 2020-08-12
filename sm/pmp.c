@@ -277,6 +277,7 @@ int pmp_set_global(int region_idx, uint8_t perm)
 #endif
   /* set PMP of itself */
   pmp_set(region_idx, perm);
+ // printm("[MY_SM] Calling pmp_set() from pmp_set_global()\r\n");
   return PMP_SUCCESS;
 }
 
@@ -298,7 +299,8 @@ int pmp_set(int region_idx, uint8_t perm)
          region_get_addr(region_idx), region_get_addr(region_idx) + region_get_size(region_idx), perm);
   printm("  pmp[%d] = pmpaddr: 0x%lx, pmpcfg: 0x%lx\r\n", reg_idx, pmpaddr, pmpcfg);
   spinlock_unlock(&pmp_lock);*/
-
+  printm("[MY_SM] pmp_set() pmp[%d] = pmpaddr: 0x%lx, pmpcfg: 0x%lx, mode[%s], range[0x%lx-0x%lx], perm[0x%x]\r\n", reg_idx, pmpaddr, pmpcfg, (region_is_tor(region_idx) ? "TOR":"NAPOT"),
+         region_get_addr(region_idx), region_get_addr(region_idx) + region_get_size(region_idx), perm);
   int n=reg_idx;
 
   switch(n) {
@@ -407,6 +409,12 @@ static int tor_region_init(uintptr_t start, uint64_t size, enum pmp_priority pri
 
   // initialize the region
   region_init(region_idx, start, size, PMP_TOR, allow_overlap, reg_idx);
+
+    printm("[MY_SM] tor_region_init() reg[%d], mode[%s], range[0x%lx-0x%lx]\r\n",
+         reg_idx, (region_is_tor(region_idx) ? "TOR":"NAPOT"),
+         region_get_addr(region_idx), region_get_addr(region_idx) + region_get_size(region_idx));
+
+ // region_init(region_idx, start, size, PMP_TOR, allow_overlap, reg_idx);
   SET_BIT(region_def_bitmap, region_idx);
   SET_BIT(reg_bitmap, reg_idx);
 
@@ -469,6 +477,16 @@ static int napot_region_init(uintptr_t start, uint64_t size, enum pmp_priority p
 
   // initialize the region
   region_init(region_idx, start, size, PMP_NAPOT, allow_overlap, reg_idx);
+
+  printm("[MY_SM] napot_region_init(): reg[%d], mode[%s], range[0x%lx-0x%lx] \r\n",
+         reg_idx, (region_is_tor(region_idx) ? "TOR":"NAPOT"),
+         region_get_addr(region_idx), region_get_addr(region_idx) + region_get_size(region_idx));
+
+//  printm("[MY_SM] napot_region_init() reg[%d], mode[%s], range[0x%lx-0x%lx]\r\n",
+  //       reg_idx, (region_is_tor(region_idx) ? "TOR":"NAPOT"),
+    //     region_get_addr(region_idx), region_get_addr(region_idx) + region_get_size(region_idx));
+  //region_init(region_idx, start, size, PMP_NAPOT, allow_overlap, reg_idx);
+
   SET_BIT(region_def_bitmap, region_idx);
   SET_BIT(reg_bitmap, reg_idx);
 
@@ -477,6 +495,7 @@ static int napot_region_init(uintptr_t start, uint64_t size, enum pmp_priority p
 
 int pmp_region_free_atomic(int region_idx)
 {
+    printm("[MY_SM] pmp_region_free_atomic(): Freeing region_idx: %d\r\n", region_idx);
 
   spinlock_lock(&pmp_lock);
 
@@ -546,3 +565,4 @@ uint64_t pmp_region_get_size(region_id i)
     return region_get_size(i);
   return 0;
 }
+

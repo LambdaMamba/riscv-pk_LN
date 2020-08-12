@@ -31,12 +31,14 @@ byte dev_public_key[PUBLIC_KEY_SIZE] = { 0, };
 int osm_pmp_set(uint8_t perm)
 {
   /* in case of OSM, PMP cfg is exactly the opposite.*/
+  printm("[MY_SM] Setting OS pmp, os_region_id: %d, perm: 0x%x \r\n", os_region_id, perm);
   return pmp_set(os_region_id, perm);
 }
 
 int smm_init()
 {
   int region = -1;
+  printm("[MY_SM] Initializing SM memory at base: 0x%x, size: 0x%x\r\n", SMM_BASE, SMM_SIZE);
   int ret = pmp_region_init_atomic(SMM_BASE, SMM_SIZE, PMP_PRI_TOP, &region, 0);
   if(ret)
     return -1;
@@ -47,6 +49,7 @@ int smm_init()
 int osm_init()
 {
   int region = -1;
+  printm("[MY_SM] Initializing OS memory at base: 0x%x, size: 0x%x\r\n", 0, -1UL);
   int ret = pmp_region_init_atomic(0, -1UL, PMP_PRI_BOTTOM, &region, 1);
   if(ret)
     return -1;
@@ -115,8 +118,9 @@ void sm_init(void)
     if(platform_init_global_once() != ENCLAVE_SUCCESS)
       die("[SM] platform global init fatal error");
   }
-
+  printm("[MY_SM] Setting PMP of SM region ID %d to PMP_NO_PERM\r\n", sm_region_id);
   pmp_set(sm_region_id, PMP_NO_PERM);
+  printm("[MY_SM] Setting PMP of OS region ID %d to PMP_ALL_PERM\r\n", os_region_id);
   pmp_set(os_region_id, PMP_ALL_PERM);
 
   /* Fire platform specific global init */
