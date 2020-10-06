@@ -374,6 +374,25 @@ static int is_create_args_valid(struct keystone_sbi_create* args)
 
 
 
+// enclave_ret_code mymmapadd_enclave(enclave_id eid, uintptr_t mmapaddr, size_t mmapsize){
+//     int region;
+//     printm("[MY_SM] Original enclave base: 0x%x, size: 0x%zx \r\n ", enclaves[eid].pa_params.dram_base, enclaves[eid].pa_params.dram_size);
+//     enclaves[eid].pa_params.dram_size = enclaves[eid].pa_params.dram_size + mmapsize;
+  
+//     printm("[MY_SM] Freeing the original enclave pmp\r\n");
+
+//     pmp_unset_global(enclaves[eid].regions[0].pmp_rid);
+//     pmp_region_free_atomic(enclaves[eid].regions[0].pmp_rid);
+
+//     printm("[MY_SM] Setting the new enclave pmp\r\n");
+
+//     pmp_region_init_atomic(enclaves[eid].pa_params.dram_base, enclaves[eid].pa_params.dram_size, PMP_PRI_ANY, &enclaves[eid].regions[0].pmp_rid, 0);
+//      printm("[MY_SM] New enclave base: 0x%x, size: 0x%zx \r\n ", enclaves[eid].pa_params.dram_base, enclaves[eid].pa_params.dram_size);
+
+//     return ENCLAVE_SUCCESS;
+// }
+	
+
 enclave_ret_code mymmapadd_enclave(enclave_id eid, uintptr_t mmapaddr, size_t mmapsize){
     int region;
     printm("[MY_SM] Original enclave base: 0x%x, size: 0x%zx \r\n ", enclaves[eid].pa_params.dram_base, enclaves[eid].pa_params.dram_size);
@@ -384,10 +403,21 @@ enclave_ret_code mymmapadd_enclave(enclave_id eid, uintptr_t mmapaddr, size_t mm
     pmp_unset_global(enclaves[eid].regions[0].pmp_rid);
     pmp_region_free_atomic(enclaves[eid].regions[0].pmp_rid);
 
-    printm("[MY_SM] Setting the new enclave pmp\r\n");
+    printm("[MY_SM] Setting the first new enclave pmp\r\n");
 
-    pmp_region_init_atomic(enclaves[eid].pa_params.dram_base, enclaves[eid].pa_params.dram_size, PMP_PRI_ANY, &enclaves[eid].regions[0].pmp_rid, 0);
-     printm("[MY_SM] New enclave base: 0x%x, size: 0x%zx \r\n ", enclaves[eid].pa_params.dram_base, enclaves[eid].pa_params.dram_size);
+    size_t sizehalf;
+
+    sizehalf = enclaves[eid].pa_params.dram_size/2;
+
+
+    pmp_region_init_atomic(enclaves[eid].pa_params.dram_base, sizehalf, PMP_PRI_ANY, &enclaves[eid].regions[0].pmp_rid, 0);
+     printm("[MY_SM] New first enclave base: 0x%x, size: 0x%zx, rid: %d \r\n ", enclaves[eid].pa_params.dram_base, sizehalf, enclaves[eid].regions[0].pmp_rid);
+
+
+    printm("[MY_SM] Setting the second new enclave pmp\r\n");
+
+    pmp_region_init_atomic(enclaves[eid].pa_params.dram_base + sizehalf, sizehalf, PMP_PRI_ANY, &enclaves[eid].regions[2].pmp_rid, 0);
+    printm("[MY_SM] New second enclave base: 0x%x, size: 0x%zx, rid: %d \r\n ", enclaves[eid].pa_params.dram_base + sizehalf, sizehalf, enclaves[eid].regions[2].pmp_rid);
 
     return ENCLAVE_SUCCESS;
 }
@@ -476,6 +506,10 @@ enclave_ret_code create_enclave(struct keystone_sbi_create create_args)
   enclaves[eid].regions[0].type = REGION_EPM;
   enclaves[eid].regions[1].pmp_rid = shared_region;
   enclaves[eid].regions[1].type = REGION_UTM;
+
+  //For the other enclave region
+  enclaves[eid].regions[2].pmp_rid = region;
+  enclaves[eid].regions[2].type = REGION_EPM;
 
   enclaves[eid].encl_satp = ((base >> RISCV_PGSHIFT) | SATP_MODE_CHOICE);
   enclaves[eid].n_thread = 0;
