@@ -21,6 +21,9 @@ extern void save_host_regs(void);
 extern void restore_host_regs(void);
 extern byte dev_public_key[PUBLIC_KEY_SIZE];
 
+
+uintptr_t shared_end, shared_start;
+
 /****************************
  *
  * Enclave utility functions
@@ -391,35 +394,104 @@ static int is_create_args_valid(struct keystone_sbi_create* args)
 
 //     return ENCLAVE_SUCCESS;
 // }
-	
 
-enclave_ret_code mymmapadd_enclave(enclave_id eid, uintptr_t mmapaddr, size_t mmapsize){
+
+// enclave_ret_code get_mymmapadd_address()
+	
+uintptr_t mymmapadd_enclave(enclave_id eid, uintptr_t mmapaddr, size_t mmapsize){
     int region;
+    int nvm = 0;
+
+    //Check if mmapsize is odd, if odd then it is nvm region, if even then it is DRAM region.
+
+    if((mmapsize)%2 != 0){
+      nvm = 1;
+    } else{
+      nvm = 0;
+    }
+
+
     printm("[MY_SM] Original enclave base: 0x%x, size: 0x%zx \r\n ", enclaves[eid].pa_params.dram_base, enclaves[eid].pa_params.dram_size);
     enclaves[eid].pa_params.dram_size = enclaves[eid].pa_params.dram_size + mmapsize;
   
-    printm("[MY_SM] Freeing the original enclave pmp\r\n");
-
-    pmp_unset_global(enclaves[eid].regions[0].pmp_rid);
-    pmp_region_free_atomic(enclaves[eid].regions[0].pmp_rid);
-
-    printm("[MY_SM] Setting the first new enclave pmp\r\n");
-
-    size_t sizehalf;
-
-    sizehalf = enclaves[eid].pa_params.dram_size/2;
 
 
-    pmp_region_init_atomic(enclaves[eid].pa_params.dram_base, sizehalf, PMP_PRI_ANY, &enclaves[eid].regions[0].pmp_rid, 0);
-     printm("[MY_SM] New first enclave base: 0x%x, size: 0x%zx, rid: %d \r\n ", enclaves[eid].pa_params.dram_base, sizehalf, enclaves[eid].regions[0].pmp_rid);
+    // size_t sizehalf;
+
+    // sizehalf = enclaves[eid].pa_params.dram_size/2;
 
 
-    printm("[MY_SM] Setting the second new enclave pmp\r\n");
+    // if(PMP_REGION_OVERLAP != pmp_region_init_atomic(enclaves[eid].pa_params.dram_base, enclaves[eid].pa_params.dram_size, PMP_PRI_ANY, &enclaves[eid].regions[0].pmp_rid, 0)){
+    //  printm("[MY_SM] New first enclave base: 0x%x, size: 0x%zx, rid: %d \r\n ", enclaves[eid].pa_params.dram_base, enclaves[eid].pa_params.dram_size, enclaves[eid].regions[0].pmp_rid);
+    // } else{
 
-    pmp_region_init_atomic(enclaves[eid].pa_params.dram_base + sizehalf, sizehalf, PMP_PRI_ANY, &enclaves[eid].regions[2].pmp_rid, 0);
-    printm("[MY_SM] New second enclave base: 0x%x, size: 0x%zx, rid: %d \r\n ", enclaves[eid].pa_params.dram_base + sizehalf, sizehalf, enclaves[eid].regions[2].pmp_rid);
+    // }
+    int i, remain;
+    uintptr_t j, addr;
+    i = enclaves[eid].pa_params.dram_size;
+    j = 1024;
+    addr = 0;
+    
 
-    return ENCLAVE_SUCCESS;
+    if(nvm==0){
+
+      printm("[MY_SM] Freeing the original enclave pmp\r\n");
+
+      pmp_unset_global(enclaves[eid].regions[0].pmp_rid);
+      pmp_region_free_atomic(enclaves[eid].regions[0].pmp_rid);
+
+      printm("[MY_SM] Setting new enclave pmp for DRAM\r\n");
+      for( i = enclaves[eid].pa_params.dram_size; i > 0; i = i - 1024){
+        if(PMP_REGION_OVERLAP == pmp_region_init_atomic(enclaves[eid].pa_params.dram_base, i, PMP_PRI_ANY, &enclaves[eid].regions[0].pmp_rid, 0)){
+          printm("Size %d is overlap.\r\n",i);
+        } else{
+          remain = enclaves[eid].pa_params.dram_size - i;
+          addr = enclaves[eid].pa_params.dram_base;
+          printm("[MY_SM] New enclave DRAM base: 0x%x, size: 0x%zx, rid: %d \r\n", enclaves[eid].pa_params.dram_base, i, enclaves[eid].regions[0].pmp_rid);
+          printm("[MY_SM] Was able to set 0x%zx in DRAM region\r\n", enclaves[eid].pa_params.dram_size - remain);
+          break;
+        }
+      }
+
+    //search for available space after the untrusted shared memory to use for nvm
+
+     } else if (nvm==1){
+      mmapsize = mmapsize - 1;
+      for(j= mmapsize; j > 0; j = j - 1024  ){
+        if(PMP_REGION_OVERLAP == pmp_region_init_atomic(shared_start - j, j, PMP_PRI_ANY, &enclaves[eid].regions[2].pmp_rid, 0)){
+          printm("Size %d is overlap.\r\n",i);
+
+        } else{
+          addr = shared_start - j;
+          printm("[MY_SM] New enclave NVM base: 0x%x, size: 0x%zx, rid: %d \r\n", shared_start - j, mmapsize, enclaves[eid].regions[2].pmp_rid);
+          break;
+        }
+      }
+    // } else if (nvm==1){
+    //   mmapsize = mmapsize - 1;
+    //   for(j=1024; j < (1024*10); j = j + 1024  ){
+    //     if(PMP_REGION_OVERLAP == pmp_region_init_atomic(shared_end + j, mmapsize, PMP_PRI_ANY, &enclaves[eid].regions[2].pmp_rid, 0)){
+    //       printm("Size %d is overlap.\r\n",i);
+
+    //     } else{
+    //       addr = shared_end + j;
+    //       printm("[MY_SM] New enclave NVM base: 0x%x, size: 0x%zx, rid: %d \r\n", shared_end + j, mmapsize, enclaves[eid].regions[2].pmp_rid);
+    //       break;
+    //     }
+    //   }
+      
+
+
+    }
+
+
+    // printm("[MY_SM] Setting the second new enclave pmp\r\n");
+
+    // pmp_region_init_atomic(enclaves[eid].pa_params.dram_base + sizehalf, sizehalf, PMP_PRI_ANY, &enclaves[eid].regions[2].pmp_rid, 0);
+    // printm("[MY_SM] New second enclave base: 0x%x, size: 0x%zx, rid: %d \r\n ", enclaves[eid].pa_params.dram_base + sizehalf, sizehalf, enclaves[eid].regions[2].pmp_rid);
+
+    //return ENCLAVE_SUCCESS;
+    return addr;
 }
 	
 
@@ -489,6 +561,9 @@ enclave_ret_code create_enclave(struct keystone_sbi_create create_args)
   printm("[MY_SM] Creating PMP region for shared memory, base: 0x%x, size: 0x%zx\r\n", utbase, utsize);
   if(pmp_region_init_atomic(utbase, utsize, PMP_PRI_BOTTOM, &shared_region, 0))
     goto free_region;
+
+  shared_end = utbase + utsize;
+  shared_start = utbase;
 
   // set pmp registers for private region (not shared)
   printm("[MY_SM] Setting PMP registers for private region %d\r\n", region);
