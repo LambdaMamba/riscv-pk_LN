@@ -455,18 +455,37 @@ uintptr_t mymmapadd_enclave(enclave_id eid, uintptr_t mmapaddr, size_t mmapsize)
 
     //search for available space after the untrusted shared memory to use for nvm
 
-     } else if (nvm==1){
+    //  } else if (nvm==1){
+    //   mmapsize = mmapsize - 1;
+    //   for(j= mmapsize; j > 0; j = j - 1024  ){
+    //     if(PMP_REGION_OVERLAP == pmp_region_init_atomic(shared_start - j, j, PMP_PRI_ANY, &enclaves[eid].regions[2].pmp_rid, 0)){
+    //       printm("Size %d is overlap.\r\n",i);
+
+    //     } else{
+    //       addr = shared_start - j;
+    //       printm("[MY_SM] New enclave NVM base: 0x%x, size: 0x%zx, rid: %d \r\n", shared_start - j, mmapsize, enclaves[eid].regions[2].pmp_rid);
+    //       break;
+    //     }
+    //   }
+
+      } else if (nvm==1){
       mmapsize = mmapsize - 1;
+      addr = 0x138000000;
       for(j= mmapsize; j > 0; j = j - 1024  ){
-        if(PMP_REGION_OVERLAP == pmp_region_init_atomic(shared_start - j, j, PMP_PRI_ANY, &enclaves[eid].regions[2].pmp_rid, 0)){
-          printm("Size %d is overlap.\r\n",i);
+        if(PMP_REGION_OVERLAP == pmp_region_init_atomic(addr, j, PMP_PRI_ANY, &enclaves[eid].regions[2].pmp_rid, 0)){
+          printm("Size %d is overlap.\r\n", j);
 
         } else{
-          addr = shared_start - j;
-          printm("[MY_SM] New enclave NVM base: 0x%x, size: 0x%zx, rid: %d \r\n", shared_start - j, mmapsize, enclaves[eid].regions[2].pmp_rid);
+          printm("[MY_SM] New enclave NVM base: 0x%x, size: 0x%zx, rid: %d \r\n", addr, j, enclaves[eid].regions[2].pmp_rid);
           break;
         }
       }
+
+
+
+
+
+
     // } else if (nvm==1){
     //   mmapsize = mmapsize - 1;
     //   for(j=1024; j < (1024*10); j = j + 1024  ){
